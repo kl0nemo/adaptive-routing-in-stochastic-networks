@@ -167,7 +167,7 @@ The distance field from sink $B$ is computed once per frame via BFS. All strateg
 - **Risky** mirrors Greedy on small graphs but shows higher variance at medium scales.
 - **Fallback** occupies the median position; effective on small networks, limited on large ones by bridge-recovery delay.
 
-The upper bound heatmap confirms the small-$T$ / large-$N$ corner is structurally inaccessible to any strategy. In regions where $\mathrm{UB}(N,T) \approx 1$, the EVO gap to the ceiling identifies a reserve addressable by continued evolutionary search.
+The upper bound heatmap confirms the small $T$ / large $N$ corner is structurally inaccessible to any strategy. In regions where $\mathrm{UB}(N,T) \approx 1$, the EVO gap to the ceiling identifies a reserve addressable by continued evolutionary search.
 
 ---
 
