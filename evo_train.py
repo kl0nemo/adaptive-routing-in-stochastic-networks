@@ -9,7 +9,6 @@ from multiprocessing import Pool, cpu_count
 import numpy as np
 import matplotlib.pyplot as plt
 
-# ─── Параметри за замовчуванням ───────────────────────────────────────────────
 BASE_N         = 10
 BASE_TICKS     = 10
 STEP_N         = 10
@@ -27,7 +26,7 @@ EDGE_RECOVERY_PROB = 0.1
 
 N_FEATURES  = 8
 N_HIDDEN    = 4
-WEIGHT_DIM  = N_FEATURES * N_HIDDEN + N_HIDDEN + N_HIDDEN + 1  # = 41
+WEIGHT_DIM  = N_FEATURES * N_HIDDEN + N_HIDDEN + N_HIDDEN + 1
 
 
 def nn_score(features: np.ndarray, weights: np.ndarray) -> float:
@@ -256,22 +255,21 @@ def _save_best_and_rotate(current_path: str, best_weights: np.ndarray,
                            verbose: bool = True) -> str:
     data = load_data(current_path)
     data["run_best"] = {
-        "weights":  best_weights.tolist(),
-        "fitness":  best_fitness,
-        "comment":  "Найкраща стратегія цього запуску перед рестартом",
+        "weights": best_weights.tolist(),
+        "fitness": best_fitness,
     }
     save_data(current_path, data)
 
     next_path = _next_run_path(current_path)
     run_num   = _parse_run_number(next_path)
     if verbose:
-        print(f"\n  [ROTATE] Рестарт! Найкращу стратегію збережено у '{current_path}'")
-        print(f"  [ROTATE] Починаю новий запуск → '{next_path}' (run #{run_num})\n")
+        print(f"\n  [RESTART] Best weights saved to '{current_path}'")
+        print(f"  [RESTART] Starting new run -> '{next_path}' (run #{run_num})\n")
     return next_path
 
 
-STAGNATION_LIMIT  = 20
-STAGNATION_RESET  = 50
+STAGNATION_LIMIT = 20
+STAGNATION_RESET = 50
 
 
 def evolve_continuous(N, T, add_generations, pop_size, eval_rounds,
@@ -284,37 +282,31 @@ def evolve_continuous(N, T, add_generations, pop_size, eval_rounds,
         while len(population) < pop_size:
             population.append(mutate(random.choice(population[:max(1, pop_size//2)])))
         population = population[:pop_size]
-        if verbose and len(state["population"]) != pop_size:
-            print(f"  [INFO] Популяцію адаптовано: "
-                  f"{len(state['population'])} -> {pop_size}")
     else:
         population = [np.random.randn(WEIGHT_DIM) * 0.5 for _ in range(pop_size)]
 
     best_weights = (_migrate_weights(state["best_weights"])
                     if "best_weights" in state
                     else population[0].copy())
-    best_fitness = state.get("best_fitness", 0.0)
-    history      = data.get("evo_history", [])
+    best_fitness    = state.get("best_fitness", 0.0)
+    history         = data.get("evo_history", [])
     total_gens_done = len(history)
 
     hof = [_migrate_weights(w) for w in state.get("hof", [])]
     if not hof:
         hof = [best_weights.copy()]
 
-    stagnation = 0
+    stagnation        = 0
     current_save_path = save_path
-    restart_at_gen = -1
+    restart_at_gen    = -1
 
     if verbose:
         run_num = _parse_run_number(current_save_path)
         if total_gens_done > 0:
-            print(f"  [RESUME] Продовжую з покоління {total_gens_done + 1} "
-                  f"(всього буде {total_gens_done + add_generations}), run #{run_num}")
+            print(f"  [RESUME] Resuming from generation {total_gens_done + 1}, run #{run_num}")
             print(f"  [BEST SO FAR] fitness={best_fitness:.3f}")
         else:
-            print(f"  [NEW] Починаю навчання з нуля (NN-агент, {WEIGHT_DIM} ваг), run #{run_num}")
-        print(f"  [ARCH] {N_FEATURES} ознак → {N_HIDDEN} прихованих → 1 вихід")
-        print(f"  [POOL] {workers} воркерів")
+            print(f"  [NEW] Starting training from scratch, run #{run_num}")
 
     for gen in range(add_generations):
         if restart_at_gen >= 0:
@@ -323,7 +315,6 @@ def evolve_continuous(N, T, add_generations, pop_size, eval_rounds,
             gen_num = total_gens_done + gen
 
         graphs  = [generate_graph(N) for _ in range(graphs_per_gen)]
-
         fitness = evaluate_population_parallel(
             population, graphs, N, T, eval_rounds, workers)
 
@@ -342,30 +333,26 @@ def evolve_continuous(N, T, add_generations, pop_size, eval_rounds,
         else:
             stagnation += 1
 
-        if stagnation >= STAGNATION_LIMIT:
-            mut_std = min(0.4 + 0.05 * (stagnation - STAGNATION_LIMIT), 2.0)
-        else:
-            mut_std = 0.4
+        mut_std = min(0.4 + 0.05 * (stagnation - STAGNATION_LIMIT), 2.0) \
+                  if stagnation >= STAGNATION_LIMIT else 0.4
 
         do_rotate = (stagnation == STAGNATION_RESET)
 
         if verbose:
             bar      = "#" * int(gen_best * 25)
-            stag_str = (f" [застій {stagnation}п, σ={mut_std:.2f}]"
+            stag_str = (f" [stagnation {stagnation}, sigma={mut_std:.2f}]"
                         if stagnation >= STAGNATION_LIMIT else "")
-            mark     = " ← НОВИЙ РЕКОРД" if improved else ""
-            rst_mark = " [РЕСТАРТ → новий файл]" if do_rotate else ""
+            mark     = " <- NEW BEST" if improved else ""
+            rst_mark = " [RESTART -> new file]" if do_rotate else ""
             print(f"  Gen {gen_num+1:4d} | "
                   f"best={gen_best:.3f} | mean={gen_mean:.3f} | "
                   f"{bar}{mark}{stag_str}{rst_mark}")
 
-        # ── Жорсткий рестарт + ротація файлу ─────────────────────────────────
         if do_rotate:
             current_save_path = _save_best_and_rotate(
                 current_save_path, best_weights, best_fitness,
                 history, verbose=verbose)
 
-            # Повний скид — все з нуля, незалежно від попереднього запуску
             data            = {}
             history         = []
             stagnation      = 0
@@ -377,7 +364,6 @@ def evolve_continuous(N, T, add_generations, pop_size, eval_rounds,
             hof          = []
             population   = [np.random.randn(WEIGHT_DIM) * 0.5 for _ in range(pop_size)]
 
-            # Сразу сохраняем пустое начальное состояние и переходим к следующей итерации
             data["weights"]     = best_weights.tolist()
             data["evo_history"] = history
             data["evo_state"]   = {
@@ -438,7 +424,7 @@ def build_heatmap(weights, increments, base_n, step_n, base_t, step_t, rounds):
             )
             results[i][j] = wins / rounds
             done += 1
-            print(f"  Теплова карта: {int(done/total*100)}%", end="\r")
+            print(f"  Heatmap: {int(done/total*100)}%", end="\r")
     print()
     return results
 
@@ -448,7 +434,7 @@ def plot_results(heatmap, evo_history,
     total_gens = len(evo_history)
     fig, axes  = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
     fig.suptitle(
-        f"NN-агент (8→4→1, softmin) — {total_gens} поколінь",
+        f"NN Agent (8->4->1, softmin) — {total_gens} generations",
         fontsize=14, fontweight="bold"
     )
 
@@ -460,36 +446,35 @@ def plot_results(heatmap, evo_history,
         extent=[x_vals[0], x_vals[-1], y_vals[0], y_vals[-1]],
         vmin=0, vmax=1
     )
-    ax.set_title("Коефіцієнт успіху агента")
-    ax.set_xlabel("Кроки (T)")
-    ax.set_ylabel("Вузли (N)")
+    ax.set_title("Agent Success Rate")
+    ax.set_xlabel("Steps (T)")
+    ax.set_ylabel("Nodes (N)")
     fig.colorbar(im, ax=ax, label="Success rate")
 
     ax2   = axes[1]
     gens  = [h[0] + 1 for h in evo_history]
     bests = [h[1]     for h in evo_history]
     means = [h[2]     for h in evo_history]
-    ax2.plot(gens, bests, color="#ff6b35", linewidth=2, label="Найкращий")
+    ax2.plot(gens, bests, color="#ff6b35", linewidth=2, label="Best")
     ax2.plot(gens, means, color="#4ecdc4", linewidth=2,
-             linestyle="--", label="Середній")
+             linestyle="--", label="Mean")
     ax2.fill_between(gens, means, bests, alpha=0.15, color="#ff6b35")
     if total_gens > 0:
         ax2.axvline(x=gens[-1], color="gray", linestyle=":", alpha=0.5)
-    ax2.set_title(f"Прогрес еволюції (всього {total_gens} поколінь)")
-    ax2.set_xlabel("Покоління")
+    ax2.set_title(f"Evolution Progress ({total_gens} generations total)")
+    ax2.set_xlabel("Generation")
     ax2.set_ylabel("Fitness (success rate)")
     ax2.set_ylim(0, 1)
     ax2.legend()
     ax2.grid(True, alpha=0.3)
 
     plt.savefig("evo_result.png", dpi=150, bbox_inches="tight")
-    print("[PLOT] Збережено у 'evo_result.png'")
     plt.show()
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="NN-агент (8→4→1, softmin) — безперервне навчання з ротацією файлів")
+        description="NN Agent (8->4->1, softmin) — continuous training with file rotation")
     parser.add_argument("--generations",    type=int, default=GENERATIONS)
     parser.add_argument("--pop_size",       type=int, default=POP_SIZE)
     parser.add_argument("--eval_rounds",    type=int, default=EVAL_ROUNDS)
@@ -531,23 +516,15 @@ def main():
     run_num     = _parse_run_number(save_path)
 
     print("=" * 60)
-    print("  NN-АГЕНТ (8→4→1) + SOFTMIN — БЕЗПЕРЕРВНЕ НАВЧАННЯ")
-    print("=" * 60)
-    print(f"  Поточний файл:         '{save_path}' (run #{run_num})")
-    print(f"  Поколінь вже навчено:  {total_done}")
-    print(f"  Додаємо поколінь:      {args.generations}")
-    print(f"  Граф навчання:         N={train_N}, T={train_T}")
-    print(f"  Карта: N {args.base_n}..{args.base_n+(args.increments-1)*args.step_n}"
-          f"  T {args.base_t}..{args.base_t+(args.increments-1)*args.step_t}")
-    print(f"  Популяція: {args.pop_size},  Eval rounds: {args.eval_rounds}")
-    print(f"  Воркери: {workers} з {cpu_count()} ядер")
-    print(f"  Ваг у мережі: {WEIGHT_DIM}")
-    print(f"  Ознаки: dist|risk|visited|degree|progress|reachable|alive_edges|is_wait")
-    print(f"  При застої {STAGNATION_RESET}п → збереження best у поточний файл + новий файл")
+    print(f"  Current file:      '{save_path}' (run #{run_num})")
+    print(f"  Generations done:  {total_done}")
+    print(f"  Adding:            {args.generations} generations")
+    print(f"  Training graph:    N={train_N}, T={train_T}")
+    print(f"  Workers: {workers} of {cpu_count()} cores")
     print("=" * 60)
 
     if not args.map_only:
-        print(f"\n[EVO] Навчання...")
+        print(f"\n[EVO] Training...")
         t0 = time.time()
         weights, evo_history, final_save_path = evolve_continuous(
             N=train_N, T=train_T,
@@ -560,20 +537,17 @@ def main():
             verbose=True,
         )
         elapsed = time.time() - t0
-        print(f"\n[DONE] +{args.generations} поколінь за {elapsed:.1f}с")
-        print(f"  Всього поколінь у поточному сеансі: {len(evo_history)}")
-        print(f"  Фінальний файл: '{final_save_path}'")
+        print(f"\n[DONE] +{args.generations} generations in {elapsed:.1f}s")
         if evo_history:
-            print(f"  Best fitness:   {max(h[1] for h in evo_history):.3f}")
+            print(f"  Best fitness: {max(h[1] for h in evo_history):.3f}")
         save_path = final_save_path
     else:
         if "weights" not in data:
-            print("[ERROR] Немає збережених ваг. Спочатку запустіть навчання.")
+            print("[ERROR] No saved weights found. Run training first.")
             return
         weights = _migrate_weights(data["weights"])
-        print(f"\n[MAP_ONLY] Використовую збережені ваги ({WEIGHT_DIM}D) з '{save_path}'")
 
-    print("\n[MAP] Будую теплову карту...")
+    print("\n[MAP] Building heatmap...")
     heatmap = build_heatmap(
         weights, args.increments,
         args.base_n, args.step_n,
@@ -589,7 +563,6 @@ def main():
         "values": heatmap.tolist(),
     }
     save_data(save_path, data)
-    print(f"[SAVED] Дані збережено у '{save_path}'")
 
     plot_results(heatmap, evo_history,
                  args.increments, args.base_n, args.step_n,
