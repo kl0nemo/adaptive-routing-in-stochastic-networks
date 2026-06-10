@@ -147,7 +147,7 @@ The distance field from sink $B$ is computed once per frame via BFS. All strateg
 
 ## 4. Results
 
-![Strategy Comparison Heatmap](strategies_comparison.jpn)
+![Strategy Comparison Heatmap](strategies_comparison.jpg)
 
 **Mean GRR across all $(N, T)$ cells:**
 
