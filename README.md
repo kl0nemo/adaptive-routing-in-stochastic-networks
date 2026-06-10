@@ -56,11 +56,7 @@ The heatmap confirms that the theoretical ceiling drops sharply in the small-$T$
 
 The navigation task is formalized as a centralized dynamic routing process with locally constrained execution. Agent state at step $t$: $S_t = \langle X_t, H_t, B \rangle$, where $X_t \in V$ is the current position, $B \in V$ is the static target node, and $H_t$ is a bounded tabu memory (size 5) for suppressing immediate cyclic loops.
 
-> **Key methodological assumption:** Although per-step policies execute locally (constrained to the 1-hop neighborhood), all heuristics rely on global topology awareness via a centralized distance field recomputed every frame.
->
-> Neighborhood: $\mathcal{N}_t(X_t)$  
-> Distance field: $d_{G_t}(v, B)$  
-> Unreachable nodes return $d_{G_t}(v, B) = \infty$ (approximated as $10^9$).
+> **Key methodological assumption:** Although per-step policies execute locally (constrained to the 1-hop neighborhood `N_t(X_t)`), all heuristics rely on global topology awareness via a centralized distance field `d_G_t(v, B)` recomputed every frame. Unreachable nodes return `d_G_t(v, B) = ∞` (approximated as `10^9`).
 
 ### 2.1. Greedy
 
