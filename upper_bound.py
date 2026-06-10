@@ -5,7 +5,6 @@ from multiprocessing import Pool, cpu_count
 
 import numpy as np
 import matplotlib
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import sys
@@ -17,7 +16,6 @@ if sys.stdout.encoding.lower() != "utf-8":
         pass
 
 
-# ── Параметры ──────────────────────────────────────────────────────────────
 BASE_N = 10
 BASE_TICKS = 10
 STEP_N = 10
@@ -25,21 +23,13 @@ STEP_T = 10
 INCREMENTS = 8
 ROUNDS = 100
 
-EDGE_DEATH_PROB = 0.3      # q
-EDGE_RECOVERY_PROB = 0.1   # p
+EDGE_DEATH_PROB = 0.3
+EDGE_RECOVERY_PROB = 0.1
 
-# Что рисовать:
-#   "mincut" -> 1 - (1 - pi)^(K * T_eff)
-#   "union"  -> min(1, K * alpha), alpha = (1 - (1 - pi)^T_eff)^L
 BOUND_MODE = "mincut"
-
-# Если True, T_eff считается по heuristic из документа:
-#   T_eff = max(1, T*(p+q)/2 - L + 1)
-# где L — длина кратчайшего пути между A и B.
 USE_HEURISTIC_TEFF = True
 
 
-# ── Графовые утилиты ───────────────────────────────────────────────────────
 def bfs(adj, s, N):
     dist = [-1] * N
     dist[s] = 0
@@ -54,7 +44,6 @@ def bfs(adj, s, N):
 
 
 def farthest_pair(adj, N):
-    """Возвращает пару (A, B), которая имеет максимальную BFS-дистанцию."""
     A, B, mx = 0, 1, -1
     for i in range(N):
         d = bfs(adj, i, N)
@@ -63,17 +52,6 @@ def farthest_pair(adj, N):
                 mx = d[j]
                 A, B = i, j
     return A, B, mx
-
-
-def build_edge_list(adj):
-    """Уникальные рёбра неориентированного графа: (u, v), u < v."""
-    edges = []
-    N = len(adj)
-    for u in range(N):
-        for v in adj[u]:
-            if u < v:
-                edges.append((u, v))
-    return edges
 
 
 class Dinic:
@@ -128,10 +106,6 @@ class Dinic:
 
 
 def min_cut_edge_connectivity(adj, s, t):
-    """
-    Точный s-t min-cut для неориентированного графа с единичными рёбрами.
-    Для неориентированного ребра (u,v) добавляем две дуги с cap=1.
-    """
     N = len(adj)
     dinic = Dinic(N)
     for u in range(N):
@@ -143,19 +117,11 @@ def min_cut_edge_connectivity(adj, s, t):
 
 
 def generate_graph(N):
-    """
-    Генерирует связный граф:
-      - случайное остовное дерево,
-      - затем добавляет рёбра,
-      - степень каждого узла в диапазоне [2, 6].
-    Возвращает adj, A, B.
-    """
     while True:
         adj = [[] for _ in range(N)]
         arr = list(range(N))
         random.shuffle(arr)
 
-        # Остовное дерево
         for i in range(1, N):
             u = arr[i]
             v = arr[random.randrange(i)]
@@ -163,7 +129,6 @@ def generate_graph(N):
                 adj[u].append(v)
                 adj[v].append(u)
 
-        # Дополнительные рёбра
         for _ in range(N):
             u = random.randrange(N)
             v = random.randrange(N)
@@ -174,10 +139,8 @@ def generate_graph(N):
         if all(2 <= len(adj[i]) <= 6 for i in range(N)):
             break
 
-    # Находим самую дальнюю пару
     A, B, _ = farthest_pair(adj, N)
 
-    # Убираем прямое ребро A-B, чтобы не было тривиального решения
     if B in adj[A]:
         adj[A].remove(B)
         adj[B].remove(A)
@@ -185,19 +148,7 @@ def generate_graph(N):
     return adj, A, B
 
 
-# ── Верхняя оценка ─────────────────────────────────────────────────────────
 def upper_bound_once(N, T, p, q):
-    """
-    Считает одну оценку для случайного графа размера N на горизонте T.
-
-    Доступны две корректные версии:
-      1) BOUND_MODE = "mincut"
-         UB = 1 - (1 - pi)^(K * T_eff)
-
-      2) BOUND_MODE = "union"
-         UB = min(1, K * alpha), где
-         alpha = (1 - (1 - pi)^T_eff)^L
-    """
     adj, A, B = generate_graph(N)
 
     dist = bfs(adj, A, N)
@@ -205,7 +156,6 @@ def upper_bound_once(N, T, p, q):
     if L == -1:
         return 0.0
 
-    # Точный min-cut между A и B
     K = min_cut_edge_connectivity(adj, A, B)
     if K <= 0:
         return 0.0
@@ -220,12 +170,10 @@ def upper_bound_once(N, T, p, q):
     if BOUND_MODE == "mincut":
         ub = 1.0 - (1.0 - pi) ** (K * T_eff)
         return float(min(1.0, max(0.0, ub)))
-
     elif BOUND_MODE == "union":
         alpha = (1.0 - (1.0 - pi) ** T_eff) ** L
         ub = K * alpha
         return float(min(1.0, max(0.0, ub)))
-
     else:
         raise ValueError("BOUND_MODE must be 'mincut' or 'union'")
 
@@ -236,7 +184,6 @@ def _run_batch(args):
     return i, j, float(sum(vals) / len(vals))
 
 
-# ── main ───────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     p = EDGE_RECOVERY_PROB
     q = EDGE_DEATH_PROB
@@ -248,7 +195,6 @@ if __name__ == "__main__":
             T = BASE_TICKS + j * STEP_T
             tasks.append((i, j, N, T, ROUNDS, p, q))
 
-    # Более тяжёлые задачи — раньше
     tasks.sort(key=lambda t: t[2] * t[3], reverse=True)
 
     result = np.zeros((INCREMENTS, INCREMENTS), dtype=float)
@@ -256,14 +202,11 @@ if __name__ == "__main__":
     total = len(tasks)
 
     workers = max(1, cpu_count() - 4)
-    print(f"[POOL] {workers} из {cpu_count()} ядер | {total} задач × {ROUNDS} раундов")
-    print(f"[MODE] BOUND_MODE={BOUND_MODE}, USE_HEURISTIC_TEFF={USE_HEURISTIC_TEFF}")
 
     with Pool(processes=workers) as pool:
         for i, j, val in pool.imap_unordered(_run_batch, tasks, chunksize=1):
             result[i, j] = val
             done += 1
-            print(f"{100 * done // total}% [{done}/{total}]", flush=True)
 
     x = [BASE_TICKS + j * STEP_T for j in range(INCREMENTS)]
     y = [BASE_N + i * STEP_N for i in range(INCREMENTS)]
@@ -282,15 +225,14 @@ if __name__ == "__main__":
     cbar_label = "UB(N,T)" if BOUND_MODE == "mincut" else "UB_union(N,T)"
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label=cbar_label)
 
-    title_main = "Верхня границя темпоральної досяжності"
     if BOUND_MODE == "mincut":
         title_sub = "UB = 1 - (1 - π)^(K · T_eff)"
     else:
         title_sub = "UB_union = min(1, K · (1 - (1 - π)^T_eff)^L)"
 
-    ax.set_title(f"{title_main}\n{title_sub}", fontsize=14)
-    ax.set_xlabel("Тіки (T)", fontsize=12)
-    ax.set_ylabel("Вузли (N)", fontsize=12)
+    ax.set_title(f"Temporal Reachability Upper Bound\n{title_sub}", fontsize=14)
+    ax.set_xlabel("Ticks (T)", fontsize=12)
+    ax.set_ylabel("Nodes (N)", fontsize=12)
 
     for i in range(INCREMENTS):
         for j in range(INCREMENTS):
@@ -309,13 +251,12 @@ if __name__ == "__main__":
     fig.text(
         0.5,
         -0.01,
-        f"p={p} (відновлення), q={q} (смерть), π={pi_v:.3f}   {ROUNDS} графів/клітинка",
+        f"p={p} (recovery), q={q} (failure), π={pi_v:.3f}   {ROUNDS} graphs/cell",
         ha="center",
         va="top",
         fontsize=10,
         bbox=dict(boxstyle="round,pad=0.3", facecolor="#f0f0f0", edgecolor="#aaaaaa"),
     )
 
-    out = "temporal_upper_bound_heatmap_corrected.png"
+    out = "upper_bound_heatmap.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
-    print(f"Збережено: {out}")
